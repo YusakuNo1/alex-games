@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0, minimum-scale=1.0">
     <title>Simple Pac-Man Game</title>
     <style>
         body { background: #000; margin: 0; font-family: Arial, sans-serif; }
@@ -35,6 +35,17 @@
         #mobilePad .down { grid-row: 3; grid-column: 2; }
         #mobilePad .left { grid-row: 2; grid-column: 1; }
         #mobilePad .right { grid-row: 2; grid-column: 3; }
+        /* Prevent zooming and scrolling */
+        html, body {
+            overflow: hidden;
+            touch-action: none;
+        }
+        /* Disable long press and text selection */
+        html, body {
+            -webkit-touch-callout: none; /* Disable callout menu */
+            -webkit-user-select: none;  /* Disable text selection */
+            user-select: none;          /* Disable text selection */
+        }
     </style>
 </head>
 <body>
@@ -339,6 +350,22 @@ document.getElementById('leftBtn').addEventListener('touchend', () => {
 });
 document.getElementById('rightBtn').addEventListener('touchend', () => {
     if (!gameOver) { pacman.dx = 0; pacman.dy = 0; }
+});
+
+// Disable context menu on long press
+document.addEventListener('contextmenu', function(event) {
+    event.preventDefault();
+});
+
+// Prevent additional events that trigger context menus
+document.addEventListener('touchstart', function(event) {
+    if (event.touches.length > 1) {
+        event.preventDefault();
+    }
+}, { passive: false });
+
+document.addEventListener('gesturestart', function(event) {
+    event.preventDefault();
 });
     </script>
 </body>
