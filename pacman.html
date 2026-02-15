@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Pac-Man Game</title>
+    <style>
+        body { background: #000; margin: 0; }
+        canvas { display: block; margin: 0 auto; background: #111; }
+        #score { color: #fff; text-align: center; font-family: sans-serif; font-size: 20px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h2 style="color:yellow; text-align:center;">Pac-Man Game (Updated)</h2>
+    <div id="score">Score: 0</div>
+    <div style="text-align:center; margin-top:10px;">
+        <button id="playAgainBtn" style="display:none; font-size:18px; padding:6px 18px;">Play Again</button>
+    </div>
+    <canvas id="game" width="456" height="504"></canvas>
+    <script>
+// --- Pac-Man Game in JavaScript ---
+const TILE_SIZE = 24;
+const GRID_WIDTH = 19;
+const GRID_HEIGHT = 21;
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const scoreDiv = document.getElementById('score');
+
+const COLORS = {
+    wall: '#2222de',
+    pacman: 'yellow',
+    dot: 'white',
+    bg: '#111',
+    ghost: 'red',
+};
+
+// Snake pattern maze: all open paths are connected, no traps
+const LEVEL = [
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,2,1,1,1,2,1],
+    [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,2,1],
+    [1,2,1,1,1,1,1,1,1,2,1,2,1,1,1,2,1,2,1],
+    [1,2,1,2,2,2,2,2,2,2,2,2,2,2,1,2,1,2,1],
+    [1,2,1,2,1,1,2,1,1,1,1,1,1,2,1,2,1,2,1],
+    [1,2,1,2,1,2,2,2,2,2,2,2,1,2,1,2,1,2,1],
+    [1,2,1,2,1,2,1,1,2,1,1,2,1,2,1,2,1,2,1],
+    [1,2,1,2,1,2,1,2,2,2,1,2,1,2,1,2,1,2,1],
+    [1,2,1,2,1,2,1,2,1,2,1,2,1,2,1,2,1,2,1],
+    [1,2,1,2,1,2,1,2,1,2,1,2,1,2,1,2,1,2,1],
+    [1,2,1,2,1,2,1,2,1,2,2,2,1,2,1,2,1,2,1],
+    [1,2,1,2,2,2,1,2,1,2,1,2,1,2,1,2,1,2,1],
+    [1,2,1,2,1,2,1,2,2,2,1,2,1,2,1,2,1,2,1],
+    [1,2,1,2,1,2,2,2,2,2,1,2,2,2,1,2,1,2,1],
+    [1,2,1,2,1,2,1,2,1,2,1,2,1,2,1,2,1,2,1],
+    [2,2,1,2,2,2,1,2,1,2,1,2,1,2,2,2,1,2,2],
+    [1,2,2,2,1,2,1,2,1,2,1,2,1,2,1,2,1,2,1],
+    [1,2,1,2,1,2,1,2,1,2,1,2,1,2,1,2,1,2,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+];
+
+let level, pacman, ghost, score, gameOver, ghostActive, win;
+
+function resetGame() {
+    level = LEVEL.map(row => row.slice());
+    pacman = { x: 9, y: 15, dx: 0, dy: 0 };
+    ghost = { x: 9, y: 7, dx: 0, dy: 1 };
+    score = 0;
+    gameOver = false;
+    ghostActive = false;
+    win = false;
+    scoreDiv.textContent = 'Score: 0';
+    document.getElementById('playAgainBtn').style.display = 'none';
+    setTimeout(() => { ghostActive = true; }, 1000); // 1 second head start
+    gameLoop();
+}
+resetGame();
+
+function drawLevel() {
+    for (let y = 0; y < GRID_HEIGHT; y++) {
+        for (let x = 0; x < GRID_WIDTH; x++) {
+            if (level[y][x] === 1) {
+                ctx.fillStyle = COLORS.wall;
+                ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            } else if (level[y][x] === 2) {
+                ctx.fillStyle = COLORS.dot;
+                ctx.beginPath();
+                ctx.arc(x * TILE_SIZE + TILE_SIZE/2, y * TILE_SIZE + TILE_SIZE/2, 4, 0, 2 * Math.PI);
+                ctx.fill();
+            }
+        }
+    }
+}
+
+function drawPacman() {
+    ctx.fillStyle = COLORS.pacman;
+    ctx.beginPath();
+    ctx.arc(pacman.x * TILE_SIZE + TILE_SIZE/2, pacman.y * TILE_SIZE + TILE_SIZE/2, TILE_SIZE/2 - 2, 0.25 * Math.PI, 1.75 * Math.PI, false);
+    ctx.lineTo(pacman.x * TILE_SIZE + TILE_SIZE/2, pacman.y * TILE_SIZE + TILE_SIZE/2);
+    ctx.fill();
+}
+
+function drawGhost() {
+    ctx.fillStyle = COLORS.ghost;
+    ctx.beginPath();
+    ctx.arc(ghost.x * TILE_SIZE + TILE_SIZE/2, ghost.y * TILE_SIZE + TILE_SIZE/2, TILE_SIZE/2 - 2, 0, 2 * Math.PI);
+    ctx.fill();
+}
+
+function move(obj) {
+    let nx = obj.x + obj.dx;
+    let ny = obj.y + obj.dy;
+    // Wrap horizontally (left/right tunnels)
+    if (nx < 0) nx = GRID_WIDTH - 1;
+    if (nx >= GRID_WIDTH) nx = 0;
+    // Wrap vertically (top/bottom tunnels)
+    if (ny < 0) ny = GRID_HEIGHT - 1;
+    if (ny >= GRID_HEIGHT) ny = 0;
+    if (level[ny] && level[ny][nx] !== 1) {
+        obj.x = nx;
+        obj.y = ny;
+    }
+}
+
+function moveGhost() {
+    // BFS to find shortest path from ghost to Pac-Man
+    const dirs = [
+        {dx:-1,dy:0}, {dx:1,dy:0}, {dx:0,dy:-1}, {dx:0,dy:1}
+    ];
+    let queue = [];
+    let visited = Array.from({length: GRID_HEIGHT}, () => Array(GRID_WIDTH).fill(false));
+    let prev = Array.from({length: GRID_HEIGHT}, () => Array(GRID_WIDTH).fill(null));
+    queue.push({x: ghost.x, y: ghost.y});
+    visited[ghost.y][ghost.x] = true;
+    let found = false;
+    while (queue.length > 0 && !found) {
+        let {x, y} = queue.shift();
+        for (let d of dirs) {
+            let nx = x + d.dx;
+            let ny = y + d.dy;
+            // Wrap
+            if (nx < 0) nx = GRID_WIDTH - 1;
+            if (nx >= GRID_WIDTH) nx = 0;
+            if (ny < 0) ny = GRID_HEIGHT - 1;
+            if (ny >= GRID_HEIGHT) ny = 0;
+            if (!visited[ny][nx] && level[ny][nx] !== 1) {
+                visited[ny][nx] = true;
+                prev[ny][nx] = {x, y};
+                queue.push({x: nx, y: ny});
+                if (nx === pacman.x && ny === pacman.y) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+    }
+    // Reconstruct path
+    let cx = pacman.x, cy = pacman.y;
+    let path = [];
+    while (prev[cy][cx] && (cx !== ghost.x || cy !== ghost.y)) {
+        path.push({x: cx, y: cy});
+        let p = prev[cy][cx];
+        cx = p.x;
+        cy = p.y;
+    }
+    if (path.length > 0) {
+        // Move ghost to the first step in the path
+        let next = path[path.length - 1];
+        ghost.dx = next.x - ghost.x;
+        ghost.dy = next.y - ghost.y;
+        // Handle wrap
+        if (ghost.dx > 1) ghost.dx = -(GRID_WIDTH - 1);
+        if (ghost.dx < -1) ghost.dx = (GRID_WIDTH - 1);
+        if (ghost.dy > 1) ghost.dy = -(GRID_HEIGHT - 1);
+        if (ghost.dy < -1) ghost.dy = (GRID_HEIGHT - 1);
+    }
+    move(ghost);
+}
+
+function update() {
+    if (gameOver || win) return;
+    move(pacman);
+    // Eat dot
+    if (level[pacman.y][pacman.x] === 2) {
+        level[pacman.y][pacman.x] = 0;
+        score += 10;
+        scoreDiv.textContent = 'Score: ' + score;
+    }
+    if (score >= 670 && !win) {
+        win = true;
+        showWinAnimation();
+        return;
+    }
+    if (ghostActive) moveGhost();
+    // Check collision
+    if (pacman.x === ghost.x && pacman.y === ghost.y) {
+        gameOver = true;
+        scoreDiv.textContent = 'Game Over! Final Score: ' + score;
+        document.getElementById('playAgainBtn').style.display = 'inline-block';
+    }
+}
+
+function draw() {
+    ctx.fillStyle = COLORS.bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    drawLevel();
+    drawPacman();
+    drawGhost();
+}
+
+function showWinAnimation() {
+    scoreDiv.textContent = 'You Win! Score: ' + score;
+    document.getElementById('playAgainBtn').style.display = 'inline-block';
+    let t = 0;
+    function animate() {
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.font = 'bold 48px sans-serif';
+        ctx.fillStyle = `hsl(${t % 360},100%,60%)`;
+        ctx.textAlign = 'center';
+        ctx.fillText('YOU WIN!', canvas.width/2, canvas.height/2);
+        t += 5;
+        if (win) requestAnimationFrame(animate);
+    }
+    animate();
+}
+
+function gameLoop() {
+    update();
+    draw();
+    if (!gameOver) {
+        setTimeout(gameLoop, 200); // Even slower movement for clarity
+    }
+}
+
+document.addEventListener('keydown', e => {
+    if (gameOver) return;
+    if (e.key === 'ArrowLeft') { pacman.dx = -1; pacman.dy = 0; }
+    else if (e.key === 'ArrowRight') { pacman.dx = 1; pacman.dy = 0; }
+    else if (e.key === 'ArrowUp') { pacman.dx = 0; pacman.dy = -1; }
+    else if (e.key === 'ArrowDown') { pacman.dx = 0; pacman.dy = 1; }
+});
+
+document.getElementById('playAgainBtn').onclick = resetGame;
+    </script>
+</body>
+</html>
